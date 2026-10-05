@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>多層級結構繩索與合力角受力分析系統</title>
+    <!-- 引入 PDF 導出與截圖套件 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        body {
+            display: flex;
+            height: 100vh;
+            background-color: #12131C;
+            color: #E2E8F0;
+            overflow: hidden;
+            flex-direction: row;
+        }
+
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            background-color: #0B0C10;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #instruction {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background-color: rgba(30, 31, 46, 0.9);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: #CBD5E1;
+            pointer-events: none;
+            border: 1px solid #2D2F45;
+            line-height: 1.5;
+            z-index: 5;
+        }
+        kbd {
+            background: #2D2F45;
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-size: 0.75rem;
+            color: #FACC15;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            display: flex;
+            gap: 6px;
+            z-index: 10;
+        }
+        .zoom-btn {
+            background-color: rgba(30, 31, 46, 0.85);
+            color: #38BDF8;
+            border: 1px solid #2D2F45;
+            border-radius: 6px;
+            width: 36px;
+            height: 36px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .zoom-btn:active {
+            background-color: #38BDF8;
+            color: #0F172A;
+        }
+
+        #sidebar {
+            width: 360px;
+            background-color: #1E1F2E;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            border-right: 1px solid #2D2F45;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.4);
+            z-index: 10;
+            overflow-y: auto;
+        }
+        h2 {
+            color: #38BDF8;
+            font-size: 1.05rem;
+            border-bottom: 2px solid #2D2F45;
+            padding-bottom: 6px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        label {
+            font-size: 0.85rem;
+            color: #94A3B8;
+        }
+        input[type="number"] {
+            background-color: #2D2F45;
+            border: 1px solid #475569;
+            color: #F8FAFC;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            font-weight: bold;
+        }
+        input[type="number"]:focus {
+            border-color: #38BDF8;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            flex: 1;
+            background-color: #38BDF8;
+            color: #0F172A;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .btn:hover:not(:disabled) {
+            background-color: #7DD3FC;
+        }
+        .btn:disabled {
+            background-color: #334155;
+            color: #64748B;
+            cursor: not-allowed;
+        }
+        .btn-action {
+            background-color: #334155;
+            color: #F8FAFC;
+        }
+        .btn-action:hover:not(:disabled) {
+            background-color: #475569;
+        }
+        .btn-pdf {
+            background-color: #10B981;
+            color: #FFF;
+        }
+        .btn-pdf:hover {
+            background-color: #34D399;
+        }
+        .btn-reset {
+            background-color: #EF4444;
+            color: #FFF;
+            margin-top: 10px;
+        }
+        .btn-reset:hover {
+            background-color: #F87171;
+        }
+
+        #node-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .path-card {
+            background-color: #27293D;
+            border-left: 4px solid #38BDF8;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .path-card.branch {
+            border-left-color: #FACC15;
+        }
+        .path-card .title {
+            font-weight: bold;
+            color: #F8FAFC;
+            display: flex;
+            justify-content: space-between;
+        }
+        .path-card .row {
+            display: flex;
+            justify-content: space-between;
+            color: #94A3B8;
+        }
+        .path-card .val {
+            font-weight: bold;
+            color: #4ADE80;
+        }
+        .path-card .highlight {
+            color: #FACC15;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+                height: auto;
+                min-height: 100vh;
+                overflow-y: auto;
+            }
+
+            #instruction {
+                display: none !important;
+            }
+
+            #canvas-container {
+                width: 100%;
+                height: 60vh;
+                flex: none;
+            }
+
+            #sidebar {
+                width: 100%;
+                height: auto;
+                overflow-y: visible;
+                border-right: none;
+                border-top: 2px solid #2D2F45;
+                box-shadow: none;
+                padding: 20px 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <div id="instruction">
+            <strong>操作說明：</strong><br>
+            • <strong>畫線 / 拉角：</strong>點擊繪製線段與轉折角。<br>
+            • <strong>從角加新線：</strong>點擊黃色合力角，再點擊畫布空白處。<br>
+            • <strong>向量正交分解：</strong>根據兩分支線的幾何角度精確計算實際分擔張力。<br>
+            • <strong>快捷鍵：</strong><kbd>Ctrl+Z</kbd> 上一步 | <kbd>Ctrl+Y</kbd> 下一步
+        </div>
+
+        <div class="zoom-controls">
+            <div class="zoom-btn" id="zoom-in-btn">+</div>
+            <div class="zoom-btn" id="zoom-out-btn">-</div>
+            <div class="zoom-btn" id="zoom-reset-btn" style="font-size:0.8rem;">100%</div>
+        </div>
+
+        <canvas id="simCanvas"></canvas>
+    </div>
+
+    <div id="sidebar">
+        <h2>物理參數設定</h2>
+        <div class="control-group">
+            <label for="weight-input">初始主線段基本張力 (kg):</label>
+            <input type="number" id="weight-input" value="100" min="1" step="5">
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-action" id="undo-btn" disabled>↩ 上一步</button>
+            <button class="btn btn-action" id="redo-btn" disabled>↪ 下一步</button>
+        </div>
+
+        <button class="btn btn-pdf" id="pdf-btn">📄 生成 PDF 報告</button>
+
+        <h2>每條線與各角的受力明細</h2>
+        <div id="node-list">
+            <div style="font-size: 0.8rem; color: #64748B; text-align: center;">畫布上尚無線段與合力角</div>
+        </div>
+
+        <button class="btn btn-reset" id="reset-btn">清空重來</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const weightInput = document.getElementById('weight-input');
+        const nodeListEl = document.getElementById('node-list');
+        const resetBtn = document.getElementById('reset-btn');
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        const pdfBtn = document.getElementById('pdf-btn');
+
+        let width, height;
+        let baseWeight = 100;
+
+        let paths = [];
+        let tempStart = null; 
+        let dragging = null;
+
+        let historyStack = [];
+        let redoStack = [];
+
+        let scale = 1;
+        let offsetX = 0;
+        let offsetY = 0;
+        let initialPinchDist = null;
+
+        function saveHistory() {
+            historyStack.push(JSON.stringify(paths));
+            redoStack = [];
+            updateHistoryButtons();
+        }
+
+        function undo() {
+            if (historyStack.length > 0) {
+                redoStack.push(JSON.stringify(paths));
+                paths = JSON.parse(historyStack.pop());
+                tempStart = null;
+                dragging = null;
+                updateSidebar();
+                draw();
+                updateHistoryButtons();
+            }
+        }
+
+        function redo() {
+            if (redoStack.length > 0) {
+                historyStack.push(JSON.stringify(paths));
+                paths = JSON.parse(redoStack.pop());
+                tempStart = null;
+                dragging = null;
+                updateSidebar();
+                draw();
+                updateHistoryButtons();
+            }
+        }
+
+        function updateHistoryButtons() {
+            undoBtn.disabled = historyStack.length === 0;
+            redoBtn.disabled = redoStack.length === 0;
+        }
+
+        function resize() {
+            width = canvas.clientWidth;
+            height = canvas.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+            draw();
+        }
+        window.addEventListener('resize', resize);
+
+        function init() {
+            resize();
+
+            weightInput.addEventListener('input', (e) => {
+                baseWeight = parseFloat(e.target.value) || 0;
+                updateSidebar();
+                draw();
+            });
+
+            resetBtn.addEventListener('click', () => {
+                if (paths.length > 0) saveHistory();
+                paths = [];
+                tempStart = null;
+                dragging = null;
+                updateSidebar();
+                draw();
+            });
+
+            undoBtn.addEventListener('click', undo);
+            redoBtn.addEventListener('click', redo);
+            pdfBtn.addEventListener('click', exportPDF);
+
+            document.getElementById('zoom-in-btn').addEventListener('click', () => {
+                scale = Math.min(scale * 1.2, 5);
+                draw();
+            });
+            document.getElementById('zoom-out-btn').addEventListener('click', () => {
+                scale = Math.max(scale / 1.2, 0.2);
+                draw();
+            });
+            document.getElementById('zoom-reset-btn').addEventListener('click', () => {
+                scale = 1;
+                offsetX = 0;
+                offsetY = 0;
+                draw();
+            });
+
+            window.addEventListener('keydown', (e) => {
+                const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+                const ctrlCmd = isMac ? e.metaKey : e.ctrlKey;
+
+                if (ctrlCmd && e.key.toLowerCase() === 'z') {
+                    if (e.shiftKey) redo();
+                    else undo();
+                    e.preventDefault();
+                } else if (ctrlCmd && e.key.toLowerCase() === 'y') {
+                    redo();
+                    e.preventDefault();
+                }
+            });
+
+            canvas.addEventListener('mousedown', handleStart);
+            canvas.addEventListener('mousemove', handleMove);
+            canvas.addEventListener('mouseup', handleEnd);
+            canvas.addEventListener('dblclick', handleDblClick);
+
+            canvas.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 2) {
+                    initialPinchDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                } else if (e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    handleStart({ clientX: touch.clientX, clientY: touch.clientY });
+                }
+            }, { passive: false });
+
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 2 && initialPinchDist) {
+                    const currentDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    const zoomFactor = currentDist / initialPinchDist;
+                    scale = Math.max(0.2, Math.min(5, scale * zoomFactor));
+                    initialPinchDist = currentDist;
+                    draw();
+                    e.preventDefault();
+                } else if (e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    handleMove({ clientX: touch.clientX, clientY: touch.clientY });
+                }
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', (e) => {
+                if (e.touches.length < 2) {
+                    initialPinchDist = null;
+                }
+                handleEnd();
+            });
+        }
+
+        function calculateAllTensions() {
+            let tensions = new Array(paths.length).fill(0);
+
+            paths.forEach((p, idx) => {
+                if (p.parentPathIdx === null || p.parentPathIdx === undefined) {
+                    tensions[idx] = baseWeight;
+                }
+            });
+
+            paths.forEach((parentPath, parentIdx) => {
+                for (let nIdx = 1; nIdx < parentPath.points.length - 1; nIdx++) {
+                    const childIndices = [];
+                    paths.forEach((cPath, cIdx) => {
+                        if (cPath.parentPathIdx === parentIdx && cPath.parentNodeIdx === nIdx) {
+                            childIndices.push(cIdx);
+                        }
+                    });
+
+                    if (childIndices.length === 0) continue;
+
+                    const prev = parentPath.points[nIdx - 1];
+                    const curr = parentPath.points[nIdx];
+                    const next = parentPath.points[nIdx + 1];
+
+                    const v1 = { x: prev.x - curr.x, y: prev.y - curr.y };
+                    const v2 = { x: next.x - curr.x, y: next.y - curr.y };
+                    const l1 = Math.hypot(v1.x, v1.y);
+                    const l2 = Math.hypot(v2.x, v2.y);
+
+                    if (l1 === 0 || l2 === 0) continue;
+
+                    const u1 = { x: v1.x / l1, y: v1.y / l1 };
+                    const u2 = { x: v2.x / l2, y: v2.y / l2 };
+
+                    const T_main = tensions[parentIdx];
+                    const F_res = {
+                        x: T_main * (u1.x + u2.x),
+                        y: T_main * (u1.y + u2.y)
+                    };
+
+                    if (childIndices.length === 1) {
+                        tensions[childIndices[0]] = Math.hypot(F_res.x, F_res.y);
+                    } else if (childIndices.length === 2) {
+                        const c1 = paths[childIndices[0]];
+                        const c2 = paths[childIndices[1]];
+
+                        const p1_end = c1.points[1];
+                        const p2_end = c2.points[1];
+
+                        const d1 = { x: p1_end.x - curr.x, y: p1_end.y - curr.y };
+                        const d2 = { x: p2_end.x - curr.x, y: p2_end.y - curr.y };
+                        const len1 = Math.hypot(d1.x, d1.y);
+                        const len2 = Math.hypot(d2.x, d2.y);
+
+                        if (len1 > 0 && len2 > 0) {
+                            const dir1 = { x: d1.x / len1, y: d1.y / len1 };
+                            const dir2 = { x: d2.x / len2, y: d2.y / len2 };
+
+                            const det = dir1.x * dir2.y - dir1.y * dir2.x;
+
+                            if (Math.abs(det) > 1e-4) {
+                                const T1 = (F_res.x * dir2.y - F_res.y * dir2.x) / det;
+                                const T2 = (dir1.x * F_res.y - dir1.y * F_res.x) / det;
+
+                                tensions[childIndices[0]] = Math.abs(T1);
+                                tensions[childIndices[1]] = Math.abs(T2);
+                            } else {
+                                const total = Math.hypot(F_res.x, F_res.y);
+                                tensions[childIndices[0]] = total / 2;
+                                tensions[childIndices[1]] = total / 2;
+                            }
+                        }
+                    } else {
+                        const totalR = Math.hypot(F_res.x, F_res.y);
+                        childIndices.forEach(idx => tensions[idx] = totalR / childIndices.length);
+                    }
+                }
+            });
+
+            return tensions;
+        }
+
+        function getPathTension(pathIdx) {
+            const tensions = calculateAllTensions();
+            return tensions[pathIdx] || 0;
+        }
+
+        function getPhysics(pathIdx, nodeIdx) {
+            const path = paths[pathIdx];
+            if (!path || nodeIdx <= 0 || nodeIdx >= path.points.length - 1) return null;
+
+            const prev = path.points[nodeIdx - 1];
+            const curr = path.points[nodeIdx];
+            const next = path.points[nodeIdx + 1];
+
+            const v1 = { x: prev.x - curr.x, y: prev.y - curr.y };
+            const v2 = { x: next.x - curr.x, y: next.y - curr.y };
+
+            const len1 = Math.hypot(v1.x, v1.y);
+            const len2 = Math.hypot(v2.x, v2.y);
+
+            if (len1 === 0 || len2 === 0) return null;
+
+            let dot = (v1.x * v2.x + v1.y * v2.y) / (len1 * len2);
+            dot = Math.max(-1, Math.min(1, dot));
+            const angleRad = Math.acos(dot);
+            const angleDeg = angleRad * (180 / Math.PI);
+
+            const factor = 2 * Math.cos(angleRad / 2);
+            const currentTension = getPathTension(pathIdx);
+            const resultantLoad = currentTension * factor;
+
+            const u1 = { x: v1.x / len1, y: v1.y / len1 };
+            const u2 = { x: v2.x / len2, y: v2.y / len2 };
+            let bisect = { x: u1.x + u2.x, y: u1.y + u2.y };
+            let bLen = Math.hypot(bisect.x, bisect.y);
+
+            let offsetDir = { x: 0, y: -1 };
+            if (bLen > 0.001) {
+                offsetDir = { x: bisect.x / bLen, y: bisect.y / bLen };
+            } else {
+                offsetDir = { x: -u1.y, y: u1.x };
+            }
+
+            return {
+                angleDeg: angleDeg.toFixed(1),
+                factor: factor.toFixed(2),
+                currentTension: currentTension.toFixed(1),
+                resultantLoad: resultantLoad.toFixed(1),
+                offsetDir: offsetDir
+            };
+        }
+
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const rawX = e.clientX - rect.left;
+            const rawY = e.clientY - rect.top;
+            
+            return {
+                x: (rawX - offsetX) / scale,
+                y: (rawY - offsetY) / scale
+            };
+        }
+
+        function handleStart(e) {
+            const { x: mx, y: my } = getCanvasCoords(e);
+
+            if (tempStart) {
+                saveHistory();
+                paths.push({
+                    points: [tempStart.point, { x: mx, y: my }],
+                    parentPathIdx: tempStart.parentPathIdx,
+                    parentNodeIdx: tempStart.parentNodeIdx
+                });
+                tempStart = null;
+                updateSidebar();
+                draw();
+                return;
+            }
+
+            for (let pIdx = 0; pIdx < paths.length; pIdx++) {
+                const path = paths[pIdx];
+                for (let iIdx = 1; iIdx < path.points.length - 1; iIdx++) {
+                    if (Math.hypot(path.points[iIdx].x - mx, path.points[iIdx].y - my) < 25 / scale) {
+                        tempStart = {
+                            point: { x: path.points[iIdx].x, y: path.points[iIdx].y },
+                            parentPathIdx: pIdx,
+                            parentNodeIdx: iIdx
+                        };
+                        draw();
+                        return;
+                    }
+                }
+            }
+
+            for (let pIdx = 0; pIdx < paths.length; pIdx++) {
+                const path = paths[pIdx];
+                for (let iIdx = 0; iIdx < path.points.length; iIdx++) {
+                    if (Math.hypot(path.points[iIdx].x - mx, path.points[iIdx].y - my) < 25 / scale) {
+                        saveHistory();
+                        dragging = { pathIdx: pIdx, pointIdx: iIdx };
+                        return;
+                    }
+                }
+            }
+
+            for (let pIdx = 0; pIdx < paths.length; pIdx++) {
+                const path = paths[pIdx];
+                for (let iIdx = 0; iIdx < path.points.length - 1; iIdx++) {
+                    const p1 = path.points[iIdx];
+                    const p2 = path.points[iIdx + 1];
+                    if (isPointNearSegment(mx, my, p1.x, p1.y, p2.x, p2.y, 20 / scale)) {
+                        saveHistory();
+                        path.points.splice(iIdx + 1, 0, { x: mx, y: my });
+                        dragging = { pathIdx: pIdx, pointIdx: iIdx + 1 };
+                        updateSidebar();
+                        draw();
+                        return;
+                    }
+                }
+            }
+
+            tempStart = { point: { x: mx, y: my }, parentPathIdx: null, parentNodeIdx: null };
+            draw();
+        }
+
+        function handleMove(e) {
+            const { x: mx, y: my } = getCanvasCoords(e);
+
+            if (dragging) {
+                const p = paths[dragging.pathIdx].points[dragging.pointIdx];
+                p.x = mx;
+                p.y = my;
+                updateSidebar();
+                draw();
+            } else if (tempStart) {
+                draw();
+                ctx.save();
+                ctx.translate(offsetX, offsetY);
+                ctx.scale(scale, scale);
+
+                ctx.beginPath();
+                ctx.moveTo(tempStart.point.x, tempStart.point.y);
+                ctx.lineTo(mx, my);
+                ctx.strokeStyle = '#FACC15';
+                ctx.setLineDash([6, 6]);
+                ctx.lineWidth = 3 / scale;
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.restore();
+            }
+        }
+
+        function handleEnd() {
+            dragging = null;
+        }
+
+        function handleDblClick(e) {
+            const { x: mx, y: my } = getCanvasCoords(e);
+            for (let pIdx = 0; pIdx < paths.length; pIdx++) {
+                const path = paths[pIdx];
+                for (let iIdx = 1; iIdx < path.points.length - 1; iIdx++) {
+                    if (Math.hypot(path.points[iIdx].x - mx, path.points[iIdx].y - my) < 25 / scale) {
+                        saveHistory();
+                        path.points.splice(iIdx, 1);
+                        updateSidebar();
+                        draw();
+                        return;
+                    }
+                }
+            }
+        }
+
+        function isPointNearSegment(px, py, x1, y1, x2, y2, threshold) {
+            const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+            if (l2 === 0) return Math.hypot(px - x1, py - y1) < threshold;
+            let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            const projX = x1 + t * (x2 - x1);
+            const projY = y1 + t * (y2 - y1);
+            return Math.hypot(px - projX, py - projY) < threshold;
+        }
+
+        function updateSidebar() {
+            nodeListEl.innerHTML = '';
+            if (paths.length === 0) {
+                nodeListEl.innerHTML = `<div style="font-size: 0.8rem; color: #64748B; text-align: center;">畫布上尚無線段與合力角</div>`;
+                return;
+            }
+
+            paths.forEach((path, pIdx) => {
+                const isBranch = path.parentPathIdx !== null && path.parentPathIdx !== undefined;
+                const tension = getPathTension(pIdx);
+
+                const card = document.createElement('div');
+                card.className = `path-card ${isBranch ? 'branch' : ''}`;
+                
+                let anglesHtml = '';
+                let angleCount = 0;
+
+                for (let i = 1; i < path.points.length - 1; i++) {
+                    const phys = getPhysics(pIdx, i);
+                    if (phys) {
+                        angleCount++;
+                        anglesHtml += `
+                            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #475569;">
+                                <div class="row"><span>角 #${i} 夾角 (θ):</span><span class="highlight">${phys.angleDeg}°</span></div>
+                                <div class="row"><span>該角總合力:</span><span class="val">${phys.resultantLoad} kg</span></div>
+                            </div>
+                        `;
+                    }
+                }
+
+                card.innerHTML = `
+                    <div class="title">
+                        <span>${isBranch ? '分支線' : '主線'} #${pIdx + 1}</span>
+                        ${isBranch ? `<span style="color:#94A3B8; font-size:0.75rem;">(源自 線#${path.parentPathIdx + 1}-角#${path.parentNodeIdx})</span>` : ''}
+                    </div>
+                    <div class="row">
+                        <span>向量計算真實張力:</span>
+                        <span style="color:#38BDF8; font-weight:bold;">${tension.toFixed(1)} kg</span>
+                    </div>
+                    ${angleCount > 0 ? anglesHtml : '<div style="color:#64748B; font-size:0.75rem;">(無拉角)</div>'}
+                `;
+
+                nodeListEl.appendChild(card);
+            });
+        }
+
+        function drawLabelWithBackground(text, x, y, color, fontSize = 14) {
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            const metrics = ctx.measureText(text);
+            const padding = 5;
+            const textWidth = metrics.width;
+            const textHeight = fontSize;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+            ctx.fillRect(x - padding, y - textHeight, textWidth + padding * 2, textHeight + padding);
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x - padding, y - textHeight, textWidth + padding * 2, textHeight + padding);
+
+            ctx.fillStyle = color;
+            ctx.fillText(text, x, y - 2);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.strokeStyle = '#1A1B26';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < width; x += 30) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+            }
+            for (let y = 0; y < height; y += 30) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+            }
+
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+
+            paths.forEach((path, pIdx) => {
+                const isBranch = path.parentPathIdx !== null && path.parentPathIdx !== undefined;
+                const tension = getPathTension(pIdx);
+
+                if (path.points.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(path.points[0].x, path.points[0].y);
+                    for (let i = 1; i < path.points.length; i++) {
+                        ctx.lineTo(path.points[i].x, path.points[i].y);
+                    }
+                    ctx.strokeStyle = isBranch ? '#FACC15' : '#38BDF8';
+                    ctx.lineWidth = 4 / scale;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
+
+                    const p1 = path.points[0];
+                    const p2 = path.points[1];
+                    const midX = (p1.x + p2.x) / 2;
+                    const midY = (p1.y + p2.y) / 2;
+                    
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const len = Math.hypot(dx, dy);
+                    const nx = len > 0 ? -dy / len : 0;
+                    const ny = len > 0 ? dx / len : -1;
+
+                    const labelX = midX + nx * (25 / scale);
+                    const labelY = midY + ny * (25 / scale);
+
+                    drawLabelWithBackground(`線#${pIdx+1}: ${tension.toFixed(1)}kg`, labelX, labelY, isBranch ? '#FACC15' : '#38BDF8', 13 / scale);
+                }
+
+                for (let i = 0; i < path.points.length; i++) {
+                    const p = path.points[i];
+                    const isMidNode = i > 0 && i < path.points.length - 1;
+
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, (isMidNode ? 8 : 5) / scale, 0, Math.PI * 2);
+                    ctx.fillStyle = isMidNode ? '#FACC15' : '#38BDF8';
+                    ctx.fill();
+                    ctx.strokeStyle = '#0F172A';
+                    ctx.lineWidth = 2 / scale;
+                    ctx.stroke();
+
+                    if (isMidNode) {
+                        const phys = getPhysics(pIdx, i);
+                        if (phys) {
+                            const dist = 30 / scale;
+                            const labelX = p.x + phys.offsetDir.x * dist;
+                            const labelY = p.y + phys.offsetDir.y * dist;
+
+                            drawLabelWithBackground(`角#${i}: ${phys.resultantLoad}kg (${phys.angleDeg}°)`, labelX, labelY, '#4ADE80', 14 / scale);
+                        }
+                    }
+                }
+            });
+
+            ctx.restore();
+        }
+
+        async function exportPDF() {
+            pdfBtn.innerText = "⏳ 正在生成 PDF...";
+            pdfBtn.disabled = true;
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+
+            pdf.setFontSize(18);
+            pdf.text("Rope & Angle Force Analysis Report", 14, 20);
+            pdf.setFontSize(10);
+            pdf.text(`Generated Date: ${new Date().toLocaleString()}`, 14, 28);
+            pdf.text(`Base Tension Weight: ${baseWeight} kg`, 14, 34);
+
+            const canvasData = canvas.toDataURL('image/png');
+            pdf.addImage(canvasData, 'PNG', 14, 40, 180, 100);
+
+            let yPos = 150;
+            pdf.setFontSize(12);
+            pdf.text("Structure Force Breakdown:", 14, yPos);
+            yPos += 8;
+
+            pdf.setFontSize(10);
+            paths.forEach((path, pIdx) => {
+                const isBranch = path.parentPathIdx !== null && path.parentPathIdx !== undefined;
+                const tension = getPathTension(pIdx);
+
+                let lineInfo = `Line #${pIdx + 1} (${isBranch ? 'Branch' : 'Main'}): Tension = ${tension.toFixed(1)} kg`;
+                pdf.text(lineInfo, 14, yPos);
+                yPos += 6;
+
+                for (let i = 1; i < path.points.length - 1; i++) {
+                    const phys = getPhysics(pIdx, i);
+                    if (phys) {
+                        let angleInfo = `   └ Angle #${i}: Angle = ${phys.angleDeg} deg, Resultant Load = ${phys.resultantLoad} kg`;
+                        pdf.text(angleInfo, 14, yPos);
+                        yPos += 6;
+                    }
+                }
+
+                if (yPos > 270) {
+                    pdf.addPage();
+                    yPos = 20;
+                }
+            });
+
+            pdf.save(`Force_Analysis_Report_${Date.now()}.pdf`);
+
+            pdfBtn.innerText = "📄 生成 PDF 報告";
+            pdfBtn.disabled = false;
+        }
+
+        init();
+    </script>
+</body>
+</html>
