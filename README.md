@@ -1,0 +1,1 @@
+# rope-force-calculator
